@@ -12,6 +12,7 @@ from exchangelib.folders import FolderQuerySet
 from exchangelib.protocol import BaseProtocol, NoVerifyHTTPAdapter
 from exchangelib.protocol import NoVerifyHTTPAdapter
 from exchangelib.protocol import BaseProtocol
+import exchangelib.queryset
 
 BaseProtocol.HTTP_ADAPTER_CLS = NoVerifyHTTPAdapter
 
@@ -28,8 +29,8 @@ class EWSWorker:
     def send_message(
         self,
         recipients: list[str], 
-        cc_recipients: list[str] | None = None, 
-        bcc_recipients: list[str] | None = None,
+        cc_recipients: list[str] = list(), 
+        bcc_recipients: list[str] = list(),
         subject: str | None = None, 
         body: str | None = None, 
         html_body: str | None = None,
@@ -41,10 +42,12 @@ class EWSWorker:
         to_recipients.extend([Mailbox(email_address=recipient) for recipient in recipients])
 
         to_ccrecipients = list()
-        to_ccrecipients.extend([Mailbox(email_address=cc_recipient) for cc_recipient in cc_recipients])
+        if cc_recipients:
+            to_ccrecipients.extend([Mailbox(email_address=cc_recipient) for cc_recipient in cc_recipients])
 
         to_bccrecipients = list()
-        to_bccrecipients.extend([Mailbox(email_address=bcc_recipient) for bcc_recipient in bcc_recipients])
+        if bcc_recipients:
+            to_bccrecipients.extend([Mailbox(email_address=bcc_recipient) for bcc_recipient in bcc_recipients])
 
         msg_obj = Message(
             account = self.Account,
@@ -70,11 +73,11 @@ class EWSWorker:
                 attachment_content = open(path_attachment,'rb').read()
                 attach_to_send = FileAttachment(name =os.path.basename(path_attachment),content = attachment_content, is_inline = False)
                 msg_obj.attach(attach_to_send)
-
-        for path_attachment in inline_paths_attachments:
-            attachment_content = open(path_attachment,'rb').read()
-            attach_to_send = FileAttachment(name =os.path.basename(path_attachment),content = attachment_content, is_inline = True,content_id=os.path.basename(path_attachment))
-            msg_obj.attach(attach_to_send)
+        if isinstance(inline_paths_attachments, list):
+            for path_attachment in inline_paths_attachments:
+                attachment_content = open(path_attachment,'rb').read()
+                attach_to_send = FileAttachment(name =os.path.basename(path_attachment),content = attachment_content, is_inline = True,content_id=os.path.basename(path_attachment))
+                msg_obj.attach(attach_to_send)
        
         msg_obj.send_and_save()
 
@@ -88,8 +91,7 @@ class EWSWorker:
         bcc_recipients: list[str] | None = None
     ):
         to_recipients = list()
-        if isinstance(recipients, list):
-            to_recipients.extend([Mailbox(email_address=recipient) for recipient in recipients])
+        to_recipients.extend([Mailbox(email_address=recipient) for recipient in recipients])
 
         to_ccrecipients = list()
         if isinstance(cc_recipients, list):
@@ -169,6 +171,8 @@ class EWSWorker:
         if folder_name:
             folder_messages = self.Account.root / 'Корневой уровень хранилища' / folder_name
         
+        if not isinstance(folder_messages, FolderQuerySet):
+            raise DoesNotExist(f"Поиск папки {folder_name}, вернул {folder_messages}")
         # Базовые фильтры
         query = Q()
         
